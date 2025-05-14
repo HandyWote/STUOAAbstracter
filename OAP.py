@@ -1,9 +1,6 @@
 import json
 import re
 import time
-from json import dumps
-from pprint import pprint
-
 import requests
 from bs4 import BeautifulSoup
 class OA:
@@ -15,10 +12,12 @@ class OA:
             "pagesize": "50",
             "fwdw": "-1"
         }
-        oaurl = 'http://oa.stu.edu.cn/csweb/list.jsp'
+        oaurl = 'http://oa-stu-edu-cn.webvpn.stu.edu.cn:8118/login/Login.jsp?logintype=1'
         r_text = self.geturl(oaurl)
-        self.events = self.getEvents(r_text, self.now_time)
-        self.getAbstract(self.events)
+        self.getEvents(r_text, self.now_time)
+        self.getAbstract()
+        self.out()
+
 
     def getTime(self):
         tm_year, tm_mon, tm_mday, tm_hour, tm_min, tm_sec, tm_wday, tm_yday, tm_isdst = time.localtime()
@@ -26,7 +25,18 @@ class OA:
         return now_time
 
     def geturl(self, url):
-        r = requests.post(url, data=self.data)
+        header = {
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Encoding": "gzip, deflate",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Referer": "http://oa-stu-edu-cn.webvpn.stu.edu.cn:8118/",
+            "Cookie": "JSESSIONID=abcOhQp-HzMKp85xiZmBz; TWFID=e8f08168fb9e611d; _UT_=ff80808190b424050190eaa06fff484d|e988fcba-bdc4-4507-9ab8-c628356256e1"
+        }
+        r = requests.post(url, data=self.data, headers=header)
+        print(r.status_code)
         r_text = r.text
         return r_text
 
@@ -37,9 +47,6 @@ class OA:
         参数:
             html_text (str): 包含HTML的文本
             now_time (str): 当天时间
-
-        返回:
-            pandas.DataFrame: 包含提取数据的表格
         """
         soup = BeautifulSoup(html_text, 'html.parser')
         tbody = soup.find('tbody')
@@ -58,20 +65,13 @@ class OA:
                     break
                 self.events.append({
                     '标题': title,
-                    '链接': 'http://oa.stu.edu.cn/' + href,
+                    '链接': 'http://oa-stu-edu-cn.webvpn.stu.edu.cn:8118' + href,
                     '发布单位': department,
                     '发布日期': date
                 })
-        return self.events
 
-    def remove_html_tags(self, text):
-        text = re.sub(r'^.*?}', '', text, flags=re.DOTALL)
-        clean_text = re.sub(r'<.*?>', '', text)
-        clean_text = re.sub(r'\s+', '', clean_text)
-        return clean_text
-
-    def getAbstract(self, events):
-        for i, event in enumerate(events):
+    def getAbstract(self):
+        for i, event in enumerate(self.events):
             link = event['链接']
             html_text = self.geturl(link)
             soup = BeautifulSoup(html_text, 'html.parser')
@@ -81,6 +81,12 @@ class OA:
             article = self.remove_html_tags(str(td))
             abstract = self.postAi(article)
             self.events[i]['摘要'] = abstract
+
+    def remove_html_tags(self, text):
+        text = re.sub(r'^.*?}', '', text, flags=re.DOTALL)
+        clean_text = re.sub(r'<.*?>', '', text)
+        clean_text = re.sub(r'\s+', '', clean_text)
+        return clean_text
 
     def postAi(self, words):
         header = {
@@ -101,6 +107,10 @@ class OA:
         content = re.sub(r'^.*?【', '', content, flags=re.DOTALL).strip()
         content = re.sub(r'\(.*?\)', '', content, flags=re.DOTALL).strip()
         return content
+
+    def out(self):
+        with open(f'./events/{self.now_time}.json', 'w', encoding='utf-8') as f:
+            json.dump(self.events, f, ensure_ascii=False, indent=4)
 
 if __name__ == '__main__':
     oa = OA()
