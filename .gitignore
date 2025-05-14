@@ -1,3 +1,4 @@
+key
 list.jsp
 OA.jsp
 TAa2gsKe9w5XkkcR
@@ -28,3 +29,4 @@ __pycache__
 *.dist-info
 *.egg
 *.dist-info
+./events

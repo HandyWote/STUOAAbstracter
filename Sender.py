@@ -1,5 +1,5 @@
 import json
-import os
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import smtplib
@@ -122,10 +122,10 @@ html_content += """
 ### 第二步：发送邮件
 
 # 邮件服务器配置
-smtp_server = 'smtp.163.com'  # 替换为你的SMTP服务器地址
-smtp_port = 465  # SMTP端口，通常为465
-smtp_user = 'handywote@163.com'  # 从环境变量中获取邮箱地址
-smtp_password = open('TAa2gsKe9w5XkkcR', 'r', encoding='utf-8').readline().strip()# 从环境变量中获取邮箱密码
+smtp_server = 'smtp.163.com'
+smtp_port = 465 
+smtp_user = 'handywote@163.com'
+smtp_password = open('key', 'r', encoding='utf-8').readline().strip()
 to_address = '24syfeng@stu.edu.cn'
 # 邮件内容
 msg = MIMEMultipart()
