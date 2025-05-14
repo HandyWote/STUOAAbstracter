@@ -22,7 +22,7 @@ class OA:
                 os.makedirs('./events')
                 
             # 主要流程
-            r_text = self.geturl(oaurl)
+            r_text = self.getUrl(oaurl)
             if r_text:
                 self.getEvents(r_text, self.now_time)
                 self.getAbstract()
@@ -41,7 +41,7 @@ class OA:
         now_time = f"{tm_year:0>4d}-{tm_mon:0>2d}-{tm_mday:0>2d}"
         return now_time
 
-    def geturl(self, url):
+    def getUrl(self, url):
         try:
             r = requests.post(url, data=self.data, timeout=30)
             if r.status_code == 200:
@@ -122,7 +122,7 @@ class OA:
                 link = event['链接']
                 print(f"正在获取摘要: {event['标题']}")
                 
-                html_text = self.geturl(link)
+                html_text = self.getUrl(link)
                 if not html_text:
                     print(f"获取链接内容失败: {link}")
                     self.events[i]['摘要'] = "[获取摘要失败]"  # 设置默认摘要
@@ -148,7 +148,7 @@ class OA:
                         self.events[i]['摘要'] = "[解析内容失败]"  # 设置默认摘要
                         continue
                         
-                    article = self.remove_html_tags(str(td))
+                    article = self.removeHtmlTags(str(td))
                     abstract = self.postAi(article)
                     
                     if abstract:
@@ -165,7 +165,7 @@ class OA:
                 if i < len(self.events):  # 确保索引有效
                     self.events[i]['摘要'] = "[处理出错]"  # 设置默认摘要
 
-    def remove_html_tags(self, text):
+    def removeHtmlTags(self, text):
         text = re.sub(r'^.*?}', '', text, flags=re.DOTALL)
         clean_text = re.sub(r'<.*?>', '', text)
         clean_text = re.sub(r'\s+', '', clean_text)
@@ -243,10 +243,53 @@ class OA:
                 json.dump(self.events, f, ensure_ascii=False, indent=4)
                 
             print(f"成功保存{len(self.events)}条事件到文件: {output_file}")
+            
+            # 尝试上传文件到服务器
+            self.uploadToServer(output_file)
         except IOError as e:
             print(f"保存文件时发生IO错误: {str(e)}")
         except Exception as e:
             print(f"保存文件时发生错误: {str(e)}")
+            
+    def uploadToServer(self, file_path):
+        """
+        将JSON文件上传到服务器
+        
+        参数:
+            file_path (str): JSON文件的路径
+        """
+        try:
+            print(f"开始上传文件到服务器: {file_path}")
+            
+            # TODO: 实现服务器连接和文件上传逻辑
+            # 服务器连接信息
+            server_url = ""  # 服务器URL，待填写
+            username = ""    # 用户名，待填写
+            password = ""    # 密码，待填写
+            
+            # 上传逻辑示例
+            if not os.path.exists(file_path):
+                print(f"文件不存在，无法上传: {file_path}")
+                return False
+                
+            # 使用requests库上传文件示例
+            # with open(file_path, 'rb') as f:
+            #     files = {'file': f}
+            #     response = requests.post(server_url, files=files, auth=(username, password))
+            #     if response.status_code == 200:
+            #         print(f"文件上传成功: {file_path}")
+            #         return True
+            #     else:
+            #         print(f"文件上传失败，状态码: {response.status_code}")
+            #         return False
+            
+            # 暂时模拟上传成功
+            print(f"文件上传功能尚未实现，请完善服务器连接信息")
+            return True
+            
+        except Exception as e:
+            print(f"上传文件时发生错误: {str(e)}")
+            return False
 
 if __name__ == '__main__':
     oa = OA()
