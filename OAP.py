@@ -12,7 +12,7 @@ class OA:
             "pagesize": "50",
             "fwdw": "-1"
         }
-        oaurl = 'http://oa-stu-edu-cn.webvpn.stu.edu.cn:8118/login/Login.jsp?logintype=1'
+        oaurl = 'http://oa.stu.edu.cn/login/Login.jsp?logintype=1'
         r_text = self.geturl(oaurl)
         self.getEvents(r_text, self.now_time)
         self.getAbstract()
@@ -25,17 +25,7 @@ class OA:
         return now_time
 
     def geturl(self, url):
-        header = {
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-            "Accept-Encoding": "gzip, deflate",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Referer": "http://oa-stu-edu-cn.webvpn.stu.edu.cn:8118/",
-            "Cookie": "JSESSIONID=abcOhQp-HzMKp85xiZmBz; TWFID=e8f08168fb9e611d; _UT_=ff80808190b424050190eaa06fff484d|e988fcba-bdc4-4507-9ab8-c628356256e1"
-        }
-        r = requests.post(url, data=self.data, headers=header)
+        r = requests.post(url, data=self.data)
         print(r.status_code)
         r_text = r.text
         return r_text
@@ -65,7 +55,7 @@ class OA:
                     break
                 self.events.append({
                     '标题': title,
-                    '链接': 'http://oa-stu-edu-cn.webvpn.stu.edu.cn:8118' + href,
+                    '链接': 'http://oa.stu.edu.cn' + href,
                     '发布单位': department,
                     '发布日期': date
                 })

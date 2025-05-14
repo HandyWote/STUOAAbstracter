@@ -125,12 +125,12 @@ html_content += """
 smtp_server = 'smtp.163.com'  # 替换为你的SMTP服务器地址
 smtp_port = 465  # SMTP端口，通常为465
 smtp_user = 'handywote@163.com'  # 从环境变量中获取邮箱地址
-smtp_password = os.getenv('email_password')  # 从环境变量中获取邮箱密码
-
+smtp_password = open('TAa2gsKe9w5XkkcR', 'r', encoding='utf-8').readline().strip()# 从环境变量中获取邮箱密码
+to_address = '24syfeng@stu.edu.cn'
 # 邮件内容
 msg = MIMEMultipart()
 msg['From'] = smtp_user
-msg['To'] = '24yhhuang2@stu.edu.cn'
+msg['To'] = to_address
 msg['Subject'] = '2025-05-14 OA通知汇总'
 
 # 添加HTML内容
@@ -140,7 +140,7 @@ msg.attach(MIMEText(html_content, 'html', 'utf-8'))
 try:
     server = smtplib.SMTP_SSL(smtp_server, smtp_port)  # 使用SSL加密
     server.login(smtp_user, smtp_password)
-    server.sendmail(smtp_user, '24yhhuang2@stu.edu.cn', msg.as_string())
+    server.sendmail(smtp_user, to_address, msg.as_string())
     server.quit()
     print("邮件发送成功！")
 except Exception as e:
