@@ -1,0 +1,16 @@
+# 核心依赖
+requests==2.31.0
+beautifulsoup4==4.12.0
+Flask==3.0.0
+python-dotenv==1.0.0
+
+# 数据库相关
+sqlite3==3.45.1  # Python内置
+
+# 邮件相关
+email-validator==2.0.0
+
+# 开发环境额外依赖
+pytest==8.0.0
+black==24.1.1
+flake8==6.1.0

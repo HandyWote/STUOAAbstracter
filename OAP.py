@@ -263,29 +263,25 @@ class OA:
             
             # TODO: 实现服务器连接和文件上传逻辑
             # 服务器连接信息
-            server_url = ""  # 服务器URL，待填写
-            username = ""    # 用户名，待填写
-            password = ""    # 密码，待填写
+            server_url = "https://oap.handywote.top/api/upload"  # 服务器URL，待填写
+            username = "handy"    # 用户名，待填写
+            password = "H-yh520888"    # 密码，待填写
             
             # 上传逻辑示例
             if not os.path.exists(file_path):
                 print(f"文件不存在，无法上传: {file_path}")
                 return False
                 
-            # 使用requests库上传文件示例
-            # with open(file_path, 'rb') as f:
-            #     files = {'file': f}
-            #     response = requests.post(server_url, files=files, auth=(username, password))
-            #     if response.status_code == 200:
-            #         print(f"文件上传成功: {file_path}")
-            #         return True
-            #     else:
-            #         print(f"文件上传失败，状态码: {response.status_code}")
-            #         return False
+            with open(file_path, 'rb') as f:
+                files = {'file': f}
+                response = requests.post(server_url, files=files, auth=(username, password))
+                if response.status_code == 200:
+                    print(f"文件上传成功: {file_path}")
+                    return True
+                else:
+                    print(f"文件上传失败，状态码: {response.status_code}")
+                    return False
             
-            # 暂时模拟上传成功
-            print(f"文件上传功能尚未实现，请完善服务器连接信息")
-            return True
             
         except Exception as e:
             print(f"上传文件时发生错误: {str(e)}")

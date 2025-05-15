@@ -3,3 +3,5 @@ list.jsp
 OA.jsp
 ./events
 *.json
+./remote
+list.txt
