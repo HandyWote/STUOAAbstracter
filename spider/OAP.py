@@ -1,12 +1,16 @@
 import json
 import re
 import time
+
 import requests
-import os
 from bs4 import BeautifulSoup
+
+from config.config import Config
 
 class OA:
     def __init__(self):
+        self.config = Config()
+        self.config.ensure_directories()
         self.events = []
         self.now_time = self.getTime()
         self.data = {
@@ -15,12 +19,9 @@ class OA:
             "fwdw": "-1"
         }
         oaurl = 'http://oa.stu.edu.cn/login/Login.jsp?logintype=1'
-        
+        self.events_dir = self.config.events_dir
+
         try:
-            # 确保events目录存在
-            if not os.path.exists('./events'):
-                os.makedirs('./events')
-                
             # 主要流程
             r_text = self.getUrl(oaurl)
             if r_text:
@@ -34,7 +35,6 @@ class OA:
             # 即使发生错误，也尝试保存已获取的数据
             if self.events:
                 self.out()
-
 
     def getTime(self):
         tm_year, tm_mon, tm_mday, tm_hour, tm_min, tm_sec, tm_wday, tm_yday, tm_isdst = time.localtime()
@@ -172,17 +172,13 @@ class OA:
         return clean_text
 
     def postAi(self, words):
-        if not words or len(words) < 10:  # 检查文本是否太短
-            print("文章内容太短，无法生成摘要")
-            return "[文章内容不足]"  # 返回默认摘要
-            
         try:
-            header = {
-                "Authorization": 'Bearer 6439f3eb9be940cb836e23773388df88.fUMSa6LsAkZyIrrC',
-                "Content-Type": "application/json"
-            }
+            header = dict(self.config.ai_headers)
+            if "Authorization" not in header:
+                print("AI API_KEY 未配置，跳过摘要生成")
+                return "[AI 未配置]"
             data = {
-                "model": 'glm-z1-flash',
+                "model": 'glm-4.5-flash',
                 "messages": [{"role": "system", "content": '''你是一个顶级的秘书，现在给你一篇文章，请你在不改变原意的情况下概括出这篇文章的的摘要，简介明了的说明。格式要求：最后结果要放到[]里，如[摘要]'''},
                              {"role": "user", "content": words}],
                 "stream": False,
@@ -235,57 +231,17 @@ class OA:
             return
             
         try:
-            # 确保目录存在
-            os.makedirs('./events', exist_ok=True)
-            
-            output_file = f'./events/{self.now_time}.json'
-            with open(output_file, 'w', encoding='utf-8') as f:
+            output_file = self.events_dir / f'{self.now_time}.json'
+            with output_file.open('w', encoding='utf-8') as f:
                 json.dump(self.events, f, ensure_ascii=False, indent=4)
                 
             print(f"成功保存{len(self.events)}条事件到文件: {output_file}")
-            
-            # 尝试上传文件到服务器
-            self.uploadToServer(output_file)
+
         except IOError as e:
             print(f"保存文件时发生IO错误: {str(e)}")
         except Exception as e:
             print(f"保存文件时发生错误: {str(e)}")
             
-    def uploadToServer(self, file_path):
-        """
-        将JSON文件上传到服务器
-        
-        参数:
-            file_path (str): JSON文件的路径
-        """
-        try:
-            print(f"开始上传文件到服务器: {file_path}")
-            
-            # TODO: 实现服务器连接和文件上传逻辑
-            # 服务器连接信息
-            server_url = "https://oap.handywote.top/api/upload"  # 服务器URL，待填写
-            username = "handy"    # 用户名，待填写
-            password = "H-yh520888"    # 密码，待填写
-            
-            # 上传逻辑示例
-            if not os.path.exists(file_path):
-                print(f"文件不存在，无法上传: {file_path}")
-                return False
-                
-            with open(file_path, 'rb') as f:
-                files = {'file': f}
-                response = requests.post(server_url, files=files, auth=(username, password))
-                if response.status_code == 200:
-                    print(f"文件上传成功: {file_path}")
-                    return True
-                else:
-                    print(f"文件上传失败，状态码: {response.status_code}")
-                    return False
-            
-            
-        except Exception as e:
-            print(f"上传文件时发生错误: {str(e)}")
-            return False
 
 if __name__ == '__main__':
     oa = OA()
