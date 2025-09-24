@@ -1,9 +1,0 @@
-# 核心依赖
-requests==2.32.0
-beautifulsoup4==4.12.0
-Flask==3.0.0
-python-dotenv==1.0.0
-
-sqlite3==3.45.1
-
-email-validator==2.0.0
