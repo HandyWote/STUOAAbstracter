@@ -1,0 +1,12 @@
+services:
+  oap:
+    build: .
+    container_name: oap-cron
+    restart: always
+    volumes:
+      - ./events:/app/events
+      - ./List.txt:/app/List.txt
+      - ./env:/app/env:ro
+      - ./key:/app/key:ro
+    environment:
+      - TZ=Asia/Shanghai
