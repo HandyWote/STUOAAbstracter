@@ -1,6 +1,8 @@
+import argparse
 import json
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 import sys
 
@@ -19,15 +21,16 @@ class OA:
     BASE_URL = "http://oa.stu.edu.cn/login/Login.jsp?logintype=1"
     AI_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 
-    def __init__(self) -> None:
+    def __init__(self, target_date: str | None = None) -> None:
         self.config = Config()
         self.config.ensure_directories()
         self.events_dir: Path = self.config.events_dir
-        self.today = time.strftime("%Y-%m-%d", time.localtime())
+        self.target_date = self._normalize_date(target_date)
         self.payload = {"pageindex": "1", "pagesize": "50", "fwdw": "-1"}
         self.events: list[dict[str, str]] = []
 
     def run(self) -> None:
+        print(f"开始抓取 {self.target_date} 的OA通知...")
         page = self._post(self.BASE_URL, self.payload)
         if not page:
             print("获取OA页面失败，无法继续处理")
@@ -35,7 +38,7 @@ class OA:
 
         events = self._parse_events(page)
         if not events:
-            print("今日没有需要记录的通知")
+            print(f"{self.target_date} 没有需要记录的通知")
             return
 
         self.events = events
@@ -69,7 +72,9 @@ class OA:
                 continue
 
             date = cells[2].get_text(strip=True)
-            if date != self.today:
+            if date > self.target_date:
+                continue
+            if date < self.target_date:
                 break
 
             href = link.get("href", "").strip()
@@ -86,6 +91,18 @@ class OA:
             )
         print(f"成功提取{len(result)}条事件")
         return result
+
+    @staticmethod
+    def _normalize_date(raw: str | None) -> str:
+        if raw is None:
+            return time.strftime("%Y-%m-%d", time.localtime())
+
+        try:
+            parsed = datetime.strptime(raw, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("日期格式必须为 YYYY-MM-DD") from None
+
+        return parsed.strftime("%Y-%m-%d")
 
     def _fill_summaries(self) -> None:
         for event in self.events:
@@ -162,7 +179,7 @@ class OA:
             print("没有事件数据可保存")
             return
 
-        output_file = self.events_dir / f"{self.today}.json"
+        output_file = self.events_dir / f"{self.target_date}.json"
         try:
             with output_file.open("w", encoding="utf-8") as handle:
                 json.dump(self.events, handle, ensure_ascii=False, indent=4)
@@ -172,4 +189,11 @@ class OA:
 
 
 if __name__ == "__main__":
-    OA().run()
+    parser = argparse.ArgumentParser(description="抓取OA通知并生成指定日期的JSON文件")
+    parser.add_argument("--date", help="目标日期，格式 YYYY-MM-DD，默认抓取当天")
+    args = parser.parse_args()
+
+    try:
+        OA(target_date=args.date).run()
+    except ValueError as exc:
+        print(exc)
