@@ -1,247 +1,175 @@
 import json
 import re
 import time
+from pathlib import Path
+import sys
+
+# 添加项目根目录到Python路径
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 import requests
 from bs4 import BeautifulSoup
 
 from config.config import Config
 
+
 class OA:
-    def __init__(self):
+    BASE_URL = "http://oa.stu.edu.cn/login/Login.jsp?logintype=1"
+    AI_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+
+    def __init__(self) -> None:
         self.config = Config()
         self.config.ensure_directories()
-        self.events = []
-        self.now_time = self.getTime()
-        self.data = {
-            "pageindex": '1',
-            "pagesize": "50",
-            "fwdw": "-1"
+        self.events_dir: Path = self.config.events_dir
+        self.today = time.strftime("%Y-%m-%d", time.localtime())
+        self.payload = {"pageindex": "1", "pagesize": "50", "fwdw": "-1"}
+        self.events: list[dict[str, str]] = []
+
+    def run(self) -> None:
+        page = self._post(self.BASE_URL, self.payload)
+        if not page:
+            print("获取OA页面失败，无法继续处理")
+            return
+
+        events = self._parse_events(page)
+        if not events:
+            print("今日没有需要记录的通知")
+            return
+
+        self.events = events
+        self._fill_summaries()
+        self._save_events()
+
+    def _post(self, url: str, data: dict[str, str] | None = None) -> str | None:
+        try:
+            response = requests.post(url, data=data, timeout=30)
+            if response.status_code == 200:
+                return response.text
+            print(f"请求失败，状态码: {response.status_code}")
+        except requests.RequestException as exc:
+            print(f"请求 {url} 失败: {exc}")
+        return None
+
+    def _parse_events(self, html: str) -> list[dict[str, str]]:
+        soup = BeautifulSoup(html, "html.parser")
+        tbody = soup.find("tbody")
+        if not tbody:
+            return []
+
+        result: list[dict[str, str]] = []
+        for row in tbody.find_all("tr", class_="datalight"):
+            cells = row.find_all("td")
+            if len(cells) < 3:
+                continue
+
+            link = cells[0].find("a")
+            if not link:
+                continue
+
+            date = cells[2].get_text(strip=True)
+            if date != self.today:
+                break
+
+            href = link.get("href", "").strip()
+            if not href:
+                continue
+
+            result.append(
+                {
+                    "标题": link.get("title", "").strip() or link.get_text(strip=True),
+                    "链接": f"http://oa.stu.edu.cn{href}",
+                    "发布单位": cells[1].get_text(strip=True),
+                    "发布日期": date,
+                }
+            )
+        print(f"成功提取{len(result)}条事件")
+        return result
+
+    def _fill_summaries(self) -> None:
+        for event in self.events:
+            detail_html = self._post(event["链接"], self.payload)
+            if not detail_html:
+                event["摘要"] = "[获取摘要失败]"
+                continue
+
+            article = self._clean_html(detail_html)
+            summary = self._call_ai(article)
+            event["摘要"] = summary or "[摘要生成失败]"
+
+    def _clean_html(self, text: str) -> str:
+        text = re.sub(r"^.*?}", "", text, flags=re.DOTALL)
+        text = re.sub(r"<.*?>", "", text)
+        return re.sub(r"\s+", "", text)
+
+    def _call_ai(self, content: str) -> str | None:
+        headers = dict(self.config.ai_headers)
+        if "Authorization" not in headers:
+            print("AI API_KEY 未配置，跳过摘要生成")
+            return "[AI 未配置]"
+
+        payload = {
+            "model": "glm-4.5-flash",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是一个顶级的秘书，现在给你一篇文章，请你在不改变原意的情况下"
+                        "概括出这篇文章的的摘要，简介明了的说明。格式要求：最后结果要放到[]里，如[摘要]"
+                    ),
+                },
+                {"role": "user", "content": content},
+            ],
+            "stream": False,
+            "temperature": 0.7,
+            "max_tokens": 2000,
         }
-        oaurl = 'http://oa.stu.edu.cn/login/Login.jsp?logintype=1'
-        self.events_dir = self.config.events_dir
 
         try:
-            # 主要流程
-            r_text = self.getUrl(oaurl)
-            if r_text:
-                self.getEvents(r_text, self.now_time)
-                self.getAbstract()
-                self.out()
-            else:
-                print("获取OA页面失败，无法继续处理")
-        except Exception as e:
-            print(f"初始化过程中发生错误: {str(e)}")
-            # 即使发生错误，也尝试保存已获取的数据
-            if self.events:
-                self.out()
+            response = requests.post(self.AI_URL, json=payload, headers=headers, timeout=60)
+            if response.status_code != 200:
+                print(f"AI API返回错误状态码: {response.status_code}")
+                return "[AI服务异常]"
 
-    def getTime(self):
-        tm_year, tm_mon, tm_mday, tm_hour, tm_min, tm_sec, tm_wday, tm_yday, tm_isdst = time.localtime()
-        now_time = f"{tm_year:0>4d}-{tm_mon:0>2d}-{tm_mday:0>2d}"
-        return now_time
+            data = response.json()
+            choices = data.get("choices") or []
+            if not choices:
+                print("AI API返回格式异常: 没有choices字段")
+                return "[AI返回格式异常]"
 
-    def getUrl(self, url):
-        try:
-            r = requests.post(url, data=self.data, timeout=30)
-            if r.status_code == 200:
-                return r.text
-            else:
-                print(f"请求URL: {url} 返回非200状态码: {r.status_code}")
-                return None
-        except requests.exceptions.Timeout:
-            print(f"请求URL: {url} 超时")
-            return None
-        except requests.exceptions.ConnectionError:
-            print(f"请求URL: {url} 连接错误")
-            return None
-        except Exception as e:
-            print(f"请求URL: {url} 发生错误: {str(e)}")
-            return None
+            content = choices[-1]["message"].get("content", "").strip()
+            content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+            content = re.sub(r"^.*?【", "", content, flags=re.DOTALL).strip()
+            content = re.sub(r"\(.*?\)", "", content, flags=re.DOTALL).strip()
 
-    def getEvents(self, html_text, now_time):
-        """
-        从HTML文本中提取<tbody>内容并转换为结构化格式
-
-        参数:
-            html_text (str): 包含HTML的文本
-            now_time (str): 当天时间
-        """
-        if not html_text:
-            print("HTML文本为空，无法提取事件")
-            return None
-            
-        try:
-            soup = BeautifulSoup(html_text, 'html.parser')
-            tbody = soup.find('tbody')
-            if not tbody:
-                print("未找到tbody元素")
-                return None
-                
-            rows = tbody.find_all('tr', class_='datalight')
-            if not rows:
-                print("未找到数据行")
-                return None
-                
-            event_count = 0
-            for row in rows:
-                try:
-                    cells = row.find_all('td')
-                    if len(cells) >= 3:
-                        title_link = cells[0].find('a')
-                        title = title_link.get('title', '').strip() if title_link else ''
-                        href = title_link.get('href', '') if title_link else ''
-                        department = cells[1].get_text(strip=True)
-                        date = cells[2].get_text(strip=True)
-                        
-                        if date != now_time:
-                            break
-                            
-                        if title and href:
-                            self.events.append({
-                                '标题': title,
-                                '链接': 'http://oa.stu.edu.cn' + href,
-                                '发布单位': department,
-                                '发布日期': date
-                            })
-                            event_count += 1
-                        else:
-                            print(f"跳过无效事件: 标题或链接为空")
-                except Exception as e:
-                    print(f"处理数据行时发生错误: {str(e)}")
-                    continue  # 继续处理下一行
-                    
-            print(f"成功提取{event_count}条事件")
-        except Exception as e:
-            print(f"提取事件时发生错误: {str(e)}")
-            return None
-
-    def getAbstract(self):
-        for i, event in enumerate(self.events):
-            try:
-                link = event['链接']
-                print(f"正在获取摘要: {event['标题']}")
-                
-                html_text = self.getUrl(link)
-                if not html_text:
-                    print(f"获取链接内容失败: {link}")
-                    self.events[i]['摘要'] = "[获取摘要失败]"  # 设置默认摘要
-                    continue
-                    
-                try:
-                    soup = BeautifulSoup(html_text, 'html.parser')
-                    tbody = soup.find('tbody')
-                    if not tbody:
-                        print(f"未找到tbody元素: {link}")
-                        self.events[i]['摘要'] = "[解析内容失败]"  # 设置默认摘要
-                        continue
-                        
-                    tbody = tbody.find('tbody')
-                    if not tbody:
-                        print(f"未找到嵌套tbody元素: {link}")
-                        self.events[i]['摘要'] = "[解析内容失败]"  # 设置默认摘要
-                        continue
-                        
-                    td = tbody.find('td')
-                    if not td:
-                        print(f"未找到td元素: {link}")
-                        self.events[i]['摘要'] = "[解析内容失败]"  # 设置默认摘要
-                        continue
-                        
-                    article = self.removeHtmlTags(str(td))
-                    abstract = self.postAi(article)
-                    
-                    if abstract:
-                        self.events[i]['摘要'] = abstract
-                    else:
-                        self.events[i]['摘要'] = "[摘要生成失败]"  # 设置默认摘要
-                        
-                except Exception as e:
-                    print(f"解析HTML内容时发生错误: {str(e)}")
-                    self.events[i]['摘要'] = "[解析内容出错]"  # 设置默认摘要
-                    
-            except Exception as e:
-                print(f"获取摘要过程中发生错误: {str(e)}")
-                if i < len(self.events):  # 确保索引有效
-                    self.events[i]['摘要'] = "[处理出错]"  # 设置默认摘要
-
-    def removeHtmlTags(self, text):
-        text = re.sub(r'^.*?}', '', text, flags=re.DOTALL)
-        clean_text = re.sub(r'<.*?>', '', text)
-        clean_text = re.sub(r'\s+', '', clean_text)
-        return clean_text
-
-    def postAi(self, words):
-        try:
-            header = dict(self.config.ai_headers)
-            if "Authorization" not in header:
-                print("AI API_KEY 未配置，跳过摘要生成")
-                return "[AI 未配置]"
-            data = {
-                "model": 'glm-4.5-flash',
-                "messages": [{"role": "system", "content": '''你是一个顶级的秘书，现在给你一篇文章，请你在不改变原意的情况下概括出这篇文章的的摘要，简介明了的说明。格式要求：最后结果要放到[]里，如[摘要]'''},
-                             {"role": "user", "content": words}],
-                "stream": False,
-                "temperature": 0.7,
-                "max_tokens": 2000
-            }
-            
-            # 设置超时，防止请求卡住
-            r = requests.post("https://open.bigmodel.cn/api/paas/v4/chat/completions", 
-                             json=data, headers=header, timeout=60)
-            
-            if r.status_code != 200:
-                print(f"AI API返回错误状态码: {r.status_code}")
-                return "[AI服务异常]"  # 返回默认摘要
-                
-            try:
-                r_json = r.json()
-                if 'choices' not in r_json or not r_json['choices']:
-                    print("AI API返回格式异常: 没有choices字段")
-                    return "[AI返回格式异常]"  # 返回默认摘要
-                    
-                content = r_json['choices'][-1]['message']['content']
-                content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
-                content = re.sub(r'^.*?【', '', content, flags=re.DOTALL).strip()
-                content = re.sub(r'\(.*?\)', '', content, flags=re.DOTALL).strip()
-                
-                # 确保摘要有内容
-                if not content or len(content) < 5:  # 检查摘要是否太短
-                    print("生成的摘要内容太短")
-                    return "[摘要生成失败]"  # 返回默认摘要
-                    
-                return content
-            except ValueError as e:
-                print(f"解析AI API返回的JSON时出错: {str(e)}")
-                return "[AI返回解析失败]"  # 返回默认摘要
-                
+            return content
         except requests.exceptions.Timeout:
             print("AI API请求超时")
-            return "[AI请求超时]"  # 返回默认摘要
+            return "[AI请求超时]"
         except requests.exceptions.ConnectionError:
             print("AI API连接错误")
-            return "[AI连接失败]"  # 返回默认摘要
-        except Exception as e:
-            print(f"调用AI API时发生错误: {str(e)}")
-            return "[AI调用失败]"  # 返回默认摘要
+            return "[AI连接失败]"
+        except ValueError as exc:
+            print(f"解析AI API返回的JSON时出错: {exc}")
+            return "[AI返回解析失败]"
+        except requests.RequestException as exc:
+            print(f"调用AI API时发生错误: {exc}")
+            return "[AI调用失败]"
 
-    def out(self):
+    def _save_events(self) -> None:
         if not self.events:
             print("没有事件数据可保存")
             return
-            
+
+        output_file = self.events_dir / f"{self.today}.json"
         try:
-            output_file = self.events_dir / f'{self.now_time}.json'
-            with output_file.open('w', encoding='utf-8') as f:
-                json.dump(self.events, f, ensure_ascii=False, indent=4)
-                
+            with output_file.open("w", encoding="utf-8") as handle:
+                json.dump(self.events, handle, ensure_ascii=False, indent=4)
             print(f"成功保存{len(self.events)}条事件到文件: {output_file}")
+        except OSError as exc:
+            print(f"保存文件时发生错误: {exc}")
 
-        except IOError as e:
-            print(f"保存文件时发生IO错误: {str(e)}")
-        except Exception as e:
-            print(f"保存文件时发生错误: {str(e)}")
-            
 
-if __name__ == '__main__':
-    oa = OA()
+if __name__ == "__main__":
+    OA().run()

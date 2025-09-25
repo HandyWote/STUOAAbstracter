@@ -2,8 +2,12 @@ key
 list.jsp
 OA.jsp
 ./spider/events
+./events
 *.json
 list.txt
 user.db
 想法.txt
-./.idea
+.venv
+env
+AGENTS.md
+__pycache__

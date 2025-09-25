@@ -1,9 +1,16 @@
+import argparse
 import datetime
 import json
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
+import sys
+
+# 添加项目根目录到Python路径
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 from config.config import Config
 
@@ -11,18 +18,16 @@ from config.config import Config
 class Sender:
     """Send the most recent OA announcement digest to configured recipients."""
 
-    def __init__(self) -> None:
+    def __init__(self, target_date: str | None = None) -> None:
         self.config = Config()
+        self.config.ensure_directories()
         self.events_dir = self.config.events_dir
-        self._ensure_runtime_dirs()
+        self.target_date = target_date
 
     def run(self) -> None:
         print("开始处理OA通知并发送邮件...")
         self._process_new_files()
         print("处理完成")
-
-    def _ensure_runtime_dirs(self) -> None:
-        self.config.ensure_directories()
 
     def _get_smtp_credentials(self) -> tuple[str | None, str | None]:
         smtp_user = self.config.smtp_user
@@ -131,7 +136,7 @@ class Sender:
         """
         return html_content
 
-    def _send_email(self, file_path: Path, recipient_email: str) -> bool:
+    def _send_email(self, file_path: Path, recipient_email: str, smtp_user: str, smtp_password: str) -> bool:
         try:
             date = file_path.stem
             with file_path.open('r', encoding='utf-8') as file:
@@ -142,10 +147,6 @@ class Sender:
                 return False
 
             html_content = self._generate_html(data, date)
-            smtp_user, smtp_password = self._get_smtp_credentials()
-            if not smtp_user or not smtp_password:
-                print(f"无法获取SMTP凭据，为 {recipient_email} 发送邮件失败")
-                return False
 
             msg = MIMEMultipart()
             msg['From'] = smtp_user
@@ -194,6 +195,21 @@ class Sender:
             print(f"在 {self.events_dir} 目录中没有找到JSON文件")
             return None
 
+        if self.target_date:
+            try:
+                target = datetime.datetime.strptime(self.target_date, '%Y-%m-%d')
+            except ValueError:
+                print(f"指定的日期格式无效: {self.target_date}，请使用 YYYY-MM-DD")
+                return None
+
+            target_file = self.events_dir / f"{target.strftime('%Y-%m-%d')}.json"
+            if target_file.exists():
+                print(f"使用指定日期的JSON文件: {target_file}")
+                return target_file
+
+            print(f"未找到指定日期 {target.strftime('%Y-%m-%d')} 的文件")
+            return None
+
         yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
         yesterday_file = self.events_dir / f"{yesterday.strftime('%Y-%m-%d')}.json"
         if yesterday_file.exists():
@@ -215,9 +231,13 @@ class Sender:
             if not email_list:
                 return
 
+            smtp_user, smtp_password = self._get_smtp_credentials()
+            if not smtp_user or not smtp_password:
+                return
+
             success_count = 0
             for email in email_list:
-                if self._send_email(target_file, email):
+                if self._send_email(target_file, email, smtp_user, smtp_password):
                     success_count += 1
 
             print(f"邮件发送完成，成功: {success_count}/{len(email_list)}")
@@ -226,4 +246,8 @@ class Sender:
 
 
 if __name__ == '__main__':
-    Sender().run()
+    parser = argparse.ArgumentParser(description='发送OA通知邮件')
+    parser.add_argument('--date', help='指定要发送的通知日期，格式 YYYY-MM-DD')
+    args = parser.parse_args()
+
+    Sender(target_date=args.date).run()
