@@ -126,6 +126,11 @@ class OA:
                 print(f"[{index}/{total}] 摘要生成失败，已使用占位文本")
             else:
                 print(f"[{index}/{total}] 摘要生成完成")
+            
+            # 清理摘要中的 # 号和开头的空格
+            if summary:
+                summary = summary.lstrip('# ').lstrip()
+            
             event["摘要"] = summary or "[摘要生成失败]"
 
     def _clean_html(self, text: str) -> str:
