@@ -4,7 +4,7 @@ OA.jsp
 ./spider/events
 ./events
 *.json
-list.txt
+List.txt
 user.db
 想法.txt
 .venv
