@@ -105,14 +105,27 @@ class OA:
         return parsed.strftime("%Y-%m-%d")
 
     def _fill_summaries(self) -> None:
-        for event in self.events:
+        total = len(self.events)
+        if total == 0:
+            return
+
+        print(f"开始生成摘要，共 {total} 条事件")
+        for index, event in enumerate(self.events, start=1):
+            title = event.get("标题", "[无标题]")
+            print(f"[{index}/{total}] 拉取详情: {title}")
+
             detail_html = self._post(event["链接"], self.payload)
             if not detail_html:
                 event["摘要"] = "[获取摘要失败]"
+                print(f"[{index}/{total}] 详情获取失败，已标记占位摘要")
                 continue
 
             article = self._clean_html(detail_html)
             summary = self._call_ai(article)
+            if not summary:
+                print(f"[{index}/{total}] 摘要生成失败，已使用占位文本")
+            else:
+                print(f"[{index}/{total}] 摘要生成完成")
             event["摘要"] = summary or "[摘要生成失败]"
 
     def _clean_html(self, text: str) -> str:
@@ -133,7 +146,7 @@ class OA:
                     "role": "system",
                     "content": (
                         "你是一个顶级新闻主编，现在给你一篇文章，请你在不改变原意的情况下"
-                        "概括出这篇文章的的摘要，简介明了的说明。"
+                        "精准概括出这篇文章的的摘要，简洁明了的讲清楚事件。"
                     ),
                 },
                 {"role": "user", "content": content},
